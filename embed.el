@@ -3,7 +3,7 @@
 ;; Copyright (C) 2018  Sam Schweigel
 
 ;; Author:  Sam Schweigel <s.schweigel@gmail.com>
-;; Version: 0.3.0
+;; Version: 0.3.1
 ;; Keywords: tools, processes
 ;; Package-Requires: ((f "0.20.0"))
 
@@ -75,24 +75,25 @@ with \\[embed-openocd-stop]."
   (if (and embed/openocd-process
 	   (eq (process-status embed/openocd-process) 'run))
       t
-    (embed-openocd-start)))
+    (progn
+      (embed-openocd-start)
+      (sit-for 1))))
 
 (defun embed/openocd-check-running ()
   (and embed/openocd-process
        (eq (process-status embed/openocd-process) 'run)))
 
 ;;;###autoload
-(defun embed-openocd-gdb ()
+(defun embed-openocd-gdb (flash)
   "Start GDB and OpenOCD if necessary, and load the binary onto
 the microcontroller."
-  (interactive)
+  (interactive "f")
   (when (embed/openocd-check-running-start)
-    (let ((flash (read-file-name "flash: ")))
-      (gdb (format "%s -i=mi %s" embed-gdb-command flash))
-      (sit-for 1)
-      (gud-basic-call "target remote localhost:3333")
-      (gud-basic-call "monitor reset halt")
-      (gud-basic-call "load"))))
+    (gdb (format "%s -i=mi %s" embed-gdb-command flash))
+    (sit-for 1)
+    (gud-basic-call "target remote localhost:3333")
+    (gud-basic-call "monitor reset halt")
+    (gud-basic-call "load")))
 
 (defun embed/openocd-rpc (command)
   (when (embed/openocd-check-running)
@@ -107,13 +108,12 @@ the microcontroller."
       result)))
 
 ;;;###autoload
-(defun embed-openocd-flash ()
+(defun embed-openocd-flash (flash)
   "Flash a binary to the connected micro, starting OpenOCD if
 necessary."
-  (interactive)
+  (interactive "f")
   (when (embed/openocd-check-running-start)
-    (let* ((flash (read-file-name "flash: "))
-	   (result (progn
+    (let* ((result (progn
 		     (message "Programming...")
 		     (embed/openocd-rpc (format "program %s verify reset" flash)))))
       (if (string-empty-p result)
