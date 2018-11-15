@@ -3,7 +3,7 @@
 ;; Copyright (C) 2018  Sam Schweigel
 
 ;; Author:  Sam Schweigel <s.schweigel@gmail.com>
-;; Version: 0.2.0
+;; Version: 0.3.0
 ;; Keywords: tools, processes
 ;; Package-Requires: ((f "0.20.0"))
 
@@ -71,21 +71,54 @@ with \\[embed-openocd-stop]."
       (message "OpenOCD is not running.")
       nil)))
 
+(defun embed/openocd-check-running-start ()
+  (if (and embed/openocd-process
+	   (eq (process-status embed/openocd-process) 'run))
+      t
+    (embed-openocd-start)))
+
+(defun embed/openocd-check-running ()
+  (and embed/openocd-process
+       (eq (process-status embed/openocd-process) 'run)))
+
 ;;;###autoload
 (defun embed-openocd-gdb ()
   "Start GDB and OpenOCD if necessary, and load the binary onto
 the microcontroller."
   (interactive)
-  (if (and embed/openocd-process
-	   (eq (process-status embed/openocd-process) 'run))
-      (let ((flash (read-file-name "flash: ")))
-	(gdb (format "%s -i=mi %s" embed-gdb-command flash))
-	(sit-for 1)
-	(gud-basic-call "target remote localhost:3333")
-	(gud-basic-call "monitor reset halt")
-	(gud-basic-call "load"))
-    (when (embed-openocd-start)
-      (embed-openocd-gdb))))
+  (when (embed/openocd-check-running-start)
+    (let ((flash (read-file-name "flash: ")))
+      (gdb (format "%s -i=mi %s" embed-gdb-command flash))
+      (sit-for 1)
+      (gud-basic-call "target remote localhost:3333")
+      (gud-basic-call "monitor reset halt")
+      (gud-basic-call "load"))))
+
+(defun embed/openocd-rpc (command)
+  (when (embed/openocd-check-running)
+    (let ((process (open-network-stream "openocd-tcl" nil "localhost" "6666"))
+	  (result nil))
+      (set-process-filter process
+			  (lambda (p s)
+			    (setq result (substring s 0 -1))))
+      (process-send-string process (concat command "\032"))
+      (accept-process-output process)
+      (delete-process process)
+      result)))
+
+;;;###autoload
+(defun embed-openocd-flash ()
+  "Flash a binary to the connected micro, starting OpenOCD if
+necessary."
+  (interactive)
+  (when (embed/openocd-check-running-start)
+    (let* ((flash (read-file-name "flash: "))
+	   (result (progn
+		     (message "Programming...")
+		     (embed/openocd-rpc (format "program %s verify reset" flash)))))
+      (if (string-empty-p result)
+	  (message "Programming succeeded.")
+	(message "Programming failed: %s" result)))))
 
 (provide 'embed)
 ;;; embed.el ends here
