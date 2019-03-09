@@ -89,8 +89,9 @@ with \\[embed-openocd-stop]."
 the microcontroller."
   (interactive "f")
   (when (embed/openocd-check-running-start)
-    (gdb (format "%s -i=mi %s" embed-gdb-command flash))
+    (gdb (format "%s -i=mi" embed-gdb-command))
     (sit-for 1)
+    (gud-basic-call (format "file %s" flash))
     (gud-basic-call "target remote localhost:3333")
     (gud-basic-call "monitor reset halt")
     (gud-basic-call "load")))
